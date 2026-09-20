@@ -10,13 +10,14 @@ Controls:
 import pygame
 import sys
 from pygame.locals import *
+import random
 
 # Initialize pygame
 pygame.init()
 
 # Constants
-SCREEN_WIDTH = 1000
-SCREEN_HEIGHT = 800
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 900
 FPS = 60
 BACKGROUND_COLOR = (0, 0, 0)
 SHIP_SIZE = 40
@@ -44,7 +45,7 @@ class Spaceship:
 
         # Trail effect
         self.trail = []
-        self.max_trail_length = 3
+        self.max_trail_length = 5
 
     def apply_force(self, force):
         """Apply force to ship"""
@@ -145,6 +146,16 @@ class Spaceship:
         elif self.pos.y > SCREEN_HEIGHT + half_size:
             self.pos.y = -half_size
 
+class Asteroid:
+    """defining asteroids"""
+
+    def __init__(self, x, y):
+        # Position and motion vectors
+        self.pos = pygame.Vector2(x, y)
+        self.vel = pygame.Vector2(0, 0)
+        self.acc = pygame.Vector2(0, 0)
+
+
 def main():
     """main game loop"""
 
@@ -156,6 +167,17 @@ def main():
 
     # create ship in middle of screen
     ship = Spaceship(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+
+    # setting up star field
+    stars = []
+
+    for i in range(150):
+        x = random.randint(0, SCREEN_WIDTH)
+        y = random.randint(0, SCREEN_HEIGHT)
+        brightness = random.randint(100, 255)
+        size = random.randint(1, 2)
+
+        stars.append((x, y, brightness, size))
 
     # ===============
     # MAIN GAME LOOP
@@ -187,8 +209,13 @@ def main():
 
         # rendering
 
-        # background
+        # draw background
         screen.fill(BACKGROUND_COLOR)
+
+        # draw stars
+        for x, y, brightness, size in stars:
+            color = (brightness, brightness, brightness)
+            pygame.draw.circle(screen, color, (x, y), size)
 
         # draw ship
         ship.draw(screen)
