@@ -25,6 +25,9 @@ SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 900
 FPS = 60
 BACKGROUND_COLOR = (0, 0, 0)
+WORLD_WIDTH = 6000
+WORLD_HEIGHT = 4500
+WORLD_STAR_COUNT = 2000
 
 # ship constants
 SHIP_SIZE = 40
@@ -35,7 +38,7 @@ RESPAWN_PROTECTION_TIME = 2.0
 ASTEROID_MIN_SIZE = 20
 ASTEROID_MAX_SIZE = 60
 ASTEROID_MIN_SPEED = 80
-ASTEROID_MAX_SPEED = 200
+ASTEROID_MAX_SPEED = 110
 ASTEROID_SPAWN_TIME = 1.5
 ASTEROID_COLOR = (130, 130, 130)
 
@@ -46,12 +49,92 @@ GARBAGE_MAX_SPEED = 120
 GARBAGE_SPAWN_TIME = 2.0
 GARBAGE_COLOR = (80, 220, 100)
 GARBAGE_SCORE = 100
+COLLECTIBLE_OFFSCREEN_TIME = 5.0
 
 # Physics constants
 SHIP_ACCEL = 600
 SHIP_DRAG = .98
 MAX_SPEED = 1000
 ROTATION_SPEED = 195
+
+class Camera:
+    """camera that follows player around the world"""
+
+    def __init__(self):
+        self.pos = pygame.Vector2(0, 0)
+
+    def update(self, target_pos):
+        # trying to center camera on target
+        self.pos.x = target_pos.x - SCREEN_WIDTH / 2
+        self.pos.y = target_pos.y - SCREEN_HEIGHT / 2
+
+        # preventing camera from showing anything outside its view
+        self.pos.x = max(0, min(self.pos.x, WORLD_WIDTH - SCREEN_WIDTH))
+        self.pos.y = max(0, min(self.pos.y, WORLD_HEIGHT - SCREEN_HEIGHT))
+
+    def apply(self, world_pos):
+        """converting world position to screen position"""
+
+        return world_pos - self.pos
+
+def spawn_outside_camera(camera, radius):
+    """reate a position just outside a random camera edge"""
+
+    spawn_distance = radius * 1.25
+    edge = random.choice(["top", "bottom", "left", "right"])
+
+    left = camera.pos.x
+    right = camera.pos.x + SCREEN_WIDTH
+    top = camera.pos.y
+    bottom = camera.pos.y + SCREEN_HEIGHT
+
+    if edge == "top":
+        pos = pygame.Vector2(
+            random.uniform(left, right),
+            top - spawn_distance
+        )
+
+        direction = pygame.Vector2(
+            random.uniform(-0.5, 0.5),
+            1
+        )
+
+    elif edge == "bottom":
+        pos = pygame.Vector2(
+            random.uniform(left, right),
+            bottom + spawn_distance
+        )
+
+        direction = pygame.Vector2(
+            random.uniform(-0.5, 0.5),
+            -1
+        )
+
+    elif edge == "left":
+        pos = pygame.Vector2(
+            left - spawn_distance,
+            random.uniform(top, bottom)
+        )
+
+        direction = pygame.Vector2(
+            1,
+            random.uniform(-0.5, 0.5)
+        )
+
+    else:
+        pos = pygame.Vector2(
+            right + spawn_distance,
+            random.uniform(top, bottom)
+        )
+
+        direction = pygame.Vector2(
+            -1,
+            random.uniform(-0.5, 0.5)
+        )
+
+    direction.normalize_ip()
+
+    return pos, direction
 
 class Spaceship:
     """Defining spaceship and physical properties"""
@@ -119,7 +202,7 @@ class Spaceship:
         self.pos += self.vel * dt
 
         # wrap around screen
-        self.screen_wrap()
+        self.keep_inside_world()
         
         # apply drag to ship to slow it
         self.vel *= SHIP_DRAG ** (dt * FPS)
@@ -129,14 +212,14 @@ class Spaceship:
 
     def reset(self):
         """reset ship to starting position"""
-        self.pos = pygame.Vector2(SCREEN_WIDTH // 2, SCREEN_HEIGHT //2)
+        self.pos = pygame.Vector2(WORLD_WIDTH // 2, WORLD_HEIGHT // 2)
         self.vel = pygame.Vector2(0, 0)
         self.acc = pygame.Vector2(0, 0)
         self.trail = []
         self.angle = 0
         self.rect.center = self.pos
 
-    def draw(self, screen):
+    def draw(self, screen, camera):
         """draw ship and trail"""
 
         # draw trail
@@ -159,8 +242,11 @@ class Spaceship:
             forward = pygame.Vector2(0, -1).rotate(angle)
             right = forward.rotate(90)
 
-            nose = pos + forward * half_size
-            back_center = pos - forward * half_size
+            # convert trail world position to screen position
+            screen_pos = camera.apply(pos)
+
+            nose = screen_pos + forward * half_size
+            back_center = screen_pos - forward * half_size
             back_left = back_center - right * half_size
             back_right = back_center + right * half_size
 
@@ -175,9 +261,10 @@ class Spaceship:
         right = forward.rotate(90)
 
         half_size = self.size / 2
+        screen_pos = camera.apply(self.pos)
 
-        nose = self.pos + forward * half_size
-        back_center = self.pos - forward * half_size
+        nose = screen_pos + forward * half_size
+        back_center = screen_pos - forward * half_size
         back_left = back_center - right * half_size
         back_right = back_center + right * half_size
 
@@ -188,25 +275,32 @@ class Spaceship:
             [nose, back_left, back_right]
         )
 
-    def screen_wrap(self):
-        """move ship to opposite side when it leave screen"""
+
+    def keep_inside_world(self):
+        """preventing ship from leaving world"""
 
         half_size = self.size / 2
 
-        if self.pos.x < -half_size:
-            self.pos.x = SCREEN_WIDTH + half_size
-        elif self.pos.x > SCREEN_WIDTH + half_size:
-            self.pos.x = -half_size
+        if self.pos.x < half_size:
+            self.pos.x = half_size
+            self.vel.x = max(0, self.vel.x)
 
-        if self.pos.y < -half_size:
-            self.pos.y = SCREEN_HEIGHT + half_size
-        elif self.pos.y > SCREEN_HEIGHT + half_size:
-            self.pos.y = -half_size
+        elif self.pos.x > WORLD_WIDTH - half_size:
+            self.pos.x = WORLD_WIDTH - half_size
+            self.vel.x = min(0, self.vel.x)
+
+        if self.pos.y < half_size:
+            self.pos.y = half_size
+            self.vel.y = max(0, self.vel.y)
+
+        elif self.pos.y > WORLD_HEIGHT - half_size:
+            self.pos.y = WORLD_HEIGHT - half_size
+            self.vel.y = min(0, self.vel.y)
 
 class Asteroid:
     """defining asteroids"""
 
-    def __init__(self):
+    def __init__(self, camera):
         # setting asteroid size, color, and spin
         self.radius = random.randint(
             ASTEROID_MIN_SIZE,
@@ -222,7 +316,7 @@ class Asteroid:
         number_of_points = random.randint(7, 12)
 
         for i in range(number_of_points):
-            point_angle = (300 / number_of_points) * i
+            point_angle = (360 / number_of_points) * i
             point_radius = self.radius * random.uniform(0.7, 1.15)
 
             point = pygame.Vector2(point_radius, 0)
@@ -230,50 +324,7 @@ class Asteroid:
 
             self.shape.append(point)
 
-        # spawn asteroids at random edges of screen
-        edge = random.choice(["top", "bottom", "left", "right"])
-
-        if edge == "top":
-            self.pos = pygame.Vector2(
-                random.randint(0, SCREEN_WIDTH),
-                -self.radius
-            )
-            direction = pygame.Vector2(
-                random.uniform(-0.5, 0.5),
-                1
-            )
-
-        elif edge == "bottom":
-            self.pos = pygame.Vector2(
-                random.randint(0, SCREEN_WIDTH),
-                SCREEN_HEIGHT + self.radius
-            )
-            direction = pygame.Vector2(
-                random.uniform(-0.5, 0.5),
-                -1
-            )
-
-        elif edge == "left":
-            self.pos = pygame.Vector2(
-                -self.radius,
-                random.randint(0, SCREEN_HEIGHT)
-            )
-            direction = pygame.Vector2(
-                1,
-                random.uniform(-0.5, 0.5)
-            )
-
-        else:
-            self.pos = pygame.Vector2(
-                SCREEN_WIDTH + self.radius,
-                random.randint(0, SCREEN_HEIGHT)
-            )
-            direction = pygame.Vector2(
-                -1,
-                random.uniform(-0.5, 0.5)
-            )
-
-        direction.normalize_ip()
+        self.pos, direction = spawn_outside_camera(camera, self.radius)
 
         speed = random.uniform(
             ASTEROID_MIN_SPEED,
@@ -303,15 +354,15 @@ class Asteroid:
             round(self.pos.y)
         )
 
-    def draw(self, screen):
+    def draw(self, screen, camera):
         """drawing asteroids"""
 
         rotated_points = []
+        screen_pos = camera.apply(self.pos)
 
         for point in self.shape:
             rotated_point = point.rotate(self.angle)
-            screen_point = self.pos + rotated_point
-            rotated_points.append(screen_point)
+            rotated_points.append(screen_pos + rotated_point)
 
         pygame.draw.polygon(
             screen,
@@ -319,74 +370,27 @@ class Asteroid:
             rotated_points
         )
 
-    def is_offscreen(self):
-        """ return True after asteroid leaves screen"""
+    def is_offscreen(self, camera):
+        """ return True after asteroid leaves camera area"""
 
         margin = self.radius * 3
 
         return(
-            self.pos.x < -margin
-            or self.pos.x > SCREEN_WIDTH + margin
-            or self.pos.y < -margin 
-            or self.pos.y > SCREEN_HEIGHT + margin
+            self.pos.x < camera.pos.x - margin
+            or self.pos.x > camera.pos.x + SCREEN_WIDTH + margin
+            or self.pos.y < camera.pos.y - margin 
+            or self.pos.y > camera.pos.y + SCREEN_HEIGHT + margin
             )
 
 class Garbage:
     """defining garbage collectible"""
 
-    def __init__(self):
+    def __init__(self, camera):
         self.radius = GARBAGE_RADIUS
 
         self.color = GARBAGE_COLOR
 
-        spawn_distance = self.radius * 1.25
-        edge = random.choice(["top", "bottom", "left", "right"])
-
-        if edge == "top":
-            self.pos = pygame.Vector2(
-                random.randint(0, SCREEN_WIDTH),
-                -spawn_distance
-            )
-
-            direction = pygame.Vector2(
-                random.uniform(-0.5, 0.5),
-                1
-            )
-
-        elif edge == "bottom":
-            self.pos = pygame.Vector2(
-                random.randint(0, SCREEN_WIDTH),
-                SCREEN_HEIGHT + spawn_distance
-            )
-
-            direction = pygame.Vector2(
-                random.uniform(-0.5, 0.5),
-                -1
-            )
-
-        elif edge == "left":
-            self.pos = pygame.Vector2(
-                -spawn_distance,
-                random.randint(0, SCREEN_HEIGHT)
-            )
-
-            direction = pygame.Vector2(
-                1,
-                random.uniform(-0.5, 0.5)
-            )
-
-        else:
-            self.pos = pygame.Vector2(
-                SCREEN_WIDTH + spawn_distance,
-                random.randint(0, SCREEN_HEIGHT)
-            )
-
-            direction = pygame.Vector2(
-                -1,
-                random.uniform(-0.5, 0.5)
-            )
-
-        direction.normalize_ip()
+        self.pos, direction = spawn_outside_camera(camera, self.radius)
 
         speed = random.uniform(
             GARBAGE_MIN_SPEED,
@@ -404,7 +408,9 @@ class Garbage:
 
         self.rect.center = self.pos
 
-    def update(self, dt):
+        self.offscreen_timer = 0
+
+    def update(self, dt, camera):
         """move garbage across the screen"""
 
         self.pos += self.vel * dt
@@ -414,27 +420,39 @@ class Garbage:
             round(self.pos.y)
         )
 
-    def draw(self, screen):
-        """draw garbage as a circle"""
+        if self.is_offscreen(camera):
+            self.offscreen_timer += dt
+        else:
+            self.offscreen_timer = 0
+
+    def draw(self, screen, camera):
+        """draw garbage as a circle, relative to the camera"""
+
+        screen_pos = camera.apply(self.pos)
 
         pygame.draw.circle(
             screen,
             self.color,
-            (round(self.pos.x), round(self.pos.y)),
+            (round(screen_pos.x), round(screen_pos.y)),
             self.radius
         )
 
-    def is_offscreen(self):
-        """return True after garbage leaves the screen"""
+    def is_offscreen(self, camera):
+        """return True after garbage leaves the camera view"""
 
         margin = self.radius * 3
 
         return (
-            self.pos.x < -margin
-            or self.pos.x > SCREEN_WIDTH + margin
-            or self.pos.y < -margin
-            or self.pos.y > SCREEN_HEIGHT + margin
+            self.pos.x + self.radius < camera.pos.x
+            or self.pos.x - self.radius > camera.pos.x + SCREEN_WIDTH 
+            or self.pos.y + self.radius < camera.pos.y
+            or self.pos.y - self.radius > camera.pos.y + SCREEN_HEIGHT
         )
+
+    def should_delete(self):
+        '''returns true after off screen time is longer than five seconds'''
+
+        return self.offscreen_timer >= COLLECTIBLE_OFFSCREEN_TIME
 
 def main():
     """main game loop"""
@@ -447,8 +465,12 @@ def main():
     game_over_font = pygame.font.Font(None, 80)
     restart_font = pygame.font.Font(None, 36)
 
-    # create ship in middle of screen
-    ship = Spaceship(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+    # defining ship, setting spawn
+    ship = Spaceship(WORLD_WIDTH // 2, WORLD_HEIGHT // 2)
+
+    # defining camera
+    camera = Camera()
+    camera.update(ship.pos)
 
     # setting up for asteroids
     asteroids = []
@@ -463,13 +485,16 @@ def main():
     # setting up star field
     stars = []
 
-    for i in range(150):
-        x = random.randint(0, SCREEN_WIDTH)
-        y = random.randint(0, SCREEN_HEIGHT)
+    for i in range(WORLD_STAR_COUNT):
+        pos = pygame.Vector2(
+            random.randint(0, WORLD_WIDTH),
+            random.randint(0, WORLD_HEIGHT)
+        )
+
         brightness = random.randint(100, 255)
         size = random.randint(1, 2)
 
-        stars.append((x, y, brightness, size))
+        stars.append((pos, brightness, size))
 
     # ===============
     # MAIN GAME LOOP
@@ -513,12 +538,15 @@ def main():
             # updating ship physics
             ship.update(dt, keys)
 
+            # update camera position
+            camera.update(ship.pos)
+
             asteroid_spawn_timer += dt
             garbage_spawn_timer += dt
 
             # spawning asteroids
             if asteroid_spawn_timer >= ASTEROID_SPAWN_TIME:
-                asteroids.append(Asteroid())
+                asteroids.append(Asteroid(camera))
                 asteroid_spawn_timer = 0
 
             for asteroid in asteroids:
@@ -528,7 +556,7 @@ def main():
             asteroids = [
                 asteroid
                 for asteroid in asteroids
-                if not asteroid.is_offscreen()
+                if not asteroid.is_offscreen(camera)
             ]
 
             # reduce respawn protection
@@ -544,7 +572,7 @@ def main():
 
                         if lives <= 0:
                             game_over = True
-                            ship.vvel = pygame.Vector2(0, 0)
+                            ship.vel = pygame.Vector2(0, 0)
                         else:
                             ship.reset()
                             invuln_timer = RESPAWN_PROTECTION_TIME
@@ -552,18 +580,18 @@ def main():
 
             # spawn garbage
             if garbage_spawn_timer >= GARBAGE_SPAWN_TIME:
-                garbage_bags.append(Garbage())
+                garbage_bags.append(Garbage(camera))
                 garbage_spawn_timer = 0
 
             # update garbage
             for garbage in garbage_bags:
-                garbage.update(dt)
+                garbage.update(dt, camera)
 
             # remove off-screen garbage
             garbage_bags = [
                 garbage
                 for garbage in garbage_bags
-                if not garbage.is_offscreen()
+                if not garbage.should_delete()
             ]
 
             for garbage in garbage_bags[:]:
@@ -572,6 +600,9 @@ def main():
                 if distance <= (ship.size / 2) + garbage.radius:
                     score += GARBAGE_SCORE
                     garbage_bags.remove(garbage)
+
+            # update camera in case collision reset the ship 
+            camera.update(ship.pos)
             
         # rendering
 
@@ -579,17 +610,26 @@ def main():
         screen.fill(BACKGROUND_COLOR)
 
         # draw stars
-        for x, y, brightness, size in stars:
-            color = (brightness, brightness, brightness)
-            pygame.draw.circle(screen, color, (x, y), size)
+        for world_pos, brightness, size in stars:
+            screen_pos = camera.apply(world_pos)
+
+            if (0 <= screen_pos.x <= SCREEN_WIDTH and 0 <= screen_pos.y <= SCREEN_HEIGHT):
+                color = (brightness, brightness, brightness)
+
+                pygame.draw.circle(
+                    screen,
+                    color,
+                    (round(screen_pos.x), round(screen_pos.y)),
+                    size
+                )
 
         # draw asteroids
         for asteroid in asteroids:
-            asteroid.draw(screen)
+            asteroid.draw(screen, camera)
 
         # draw garbage
         for garbage in garbage_bags:
-            garbage.draw(screen)
+            garbage.draw(screen, camera)
 
         # draw lives counter
         lives_text = hud_font.render(
@@ -612,7 +652,7 @@ def main():
 
         # draw ship
         if not game_over:
-            ship.draw(screen)
+            ship.draw(screen, camera)
 
         # draw game over screen
         if game_over:
