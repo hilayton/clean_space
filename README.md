@@ -8,12 +8,42 @@ Watch out for asteroids though, as damaging your ship too much will strand you. 
 
 ## Controls
 A: Turn left
+
 D: Turn right
+
 W: Accelerate
+
 R: Reset
+
 ESC: Close game
 
+## Work Outline
+### Completed
+- Seperate screen and world dimension
+- world-coordinate positions for the ship and objects
+- Camera that follows the player
+- Drawing tied to screen/ camera postions
+    - Objects spawn around camera
+- Collision logic
+- Collectibles stay alive outside camera area temporarily
+- World boundries
+- Star field
+- Station at center of world
+- Station drop-off radus
 
+### To-do
+- Convert score to cargo storage
+- Cargo delivered when in station cargo radius
+- Convert delivered cargo into credits
+- Create upgrade menu
+    - Create ship upgrade values
+- Add ship fuel and refueling
+- Add ore and salvage sub-classes
+- Add minimap
+
+### Stretch Goals
+- Add multiple ship classes with different stats
+    - Speed, cargo, turning rate
 
 
 # Old README
