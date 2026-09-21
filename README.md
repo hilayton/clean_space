@@ -10,19 +10,19 @@ The player’s score and remaining lives will be displayed on the screen through
 ## Goals
 To be implemented in order, possibly. IDK. I've never made a game or a real program before. 
 
-1. Be able to move a ship around the screen 
+- [x] Be able to move a ship around the screen 
     - Should have inertial movement
-2. Basic asteroids and garbage shapes appear and fly in from off screen, from all directions
-3. Implement collision logic between asteroids and ship
+- [x] Basic asteroids and garbage shapes appear and fly in from off screen, from all directions
+- [x] Implement collision logic between asteroids and ship
     - Colliding with asteroids will cause ship destruction
     - Colliding with garbage causes garbage to dissapear
-4. Implement scoring and lives logic
+- [x] Implement scoring and lives logic
     - Score will probably be in increments of 100
         - May implement alternate trash bags worth more points
     - Limited to three lives per run
         - Game over screen will also be implemented
         - Game over screen will allow player to restart game
-5. Implement SFX and VFX
+- [] Implement SFX and VFX
     - SFX
         - Sound when player collects garbage
         - Sound when player collides with asteroid
