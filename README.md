@@ -30,20 +30,30 @@ ESC: Close game
 - Star field
 - Station at center of world
 - Station drop-off radus
+- Converted score to cargo storage
+- Added station menu
+    - Shows current credits and fuel level
+    - Has menu options to sell garbage collected and buy fuel
+    - Placeholder added for ship upgrades
+- Convert delivered cargo into credits
+- Added minimap
+- Added ship fuel and refueling
+- Asteroids bounce off station docking zone
+- Added ship health
+- Asteroids and ship bounce away from each other after colliding
+- Added fade out/ in when ship is out of fuel or destroyed
+    - Shows cargo and credits lost
+    - Shows message that ship is being recovered to station
+    - If no more lives available, shows game over screen
 
 ### To-do
-- Convert score to cargo storage
-- Cargo delivered when in station cargo radius
-- Convert delivered cargo into credits
 - Create upgrade menu
     - Create ship upgrade values
-- Add ship fuel and refueling
-- Add ore and salvage sub-classes
-- Add minimap
 
 ### Stretch Goals
 - Add multiple ship classes with different stats
     - Speed, cargo, turning rate
+- Add ore and salvage sub-classes
 
 
 # Old README
