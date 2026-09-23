@@ -14,11 +14,11 @@ from pygame.locals import *
 import random
 import math
 
-# Initialize pygame
+# initialize pygame
 pygame.init()
 
 # ==================================
-# Constants
+# CONSTANTS
 # ==================================
 
 # screen constants
@@ -26,9 +26,15 @@ SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 900
 FPS = 60
 BACKGROUND_COLOR = (0, 0, 0)
-WORLD_WIDTH = 6000
-WORLD_HEIGHT = 4500
-WORLD_STAR_COUNT = 2000
+
+# world constants
+WORLD_WIDTH = 100000
+WORLD_HEIGHT = 100000
+
+# star constants
+CAMERA_STAR_COUNT = 150
+STAR_MIN_PARALLAX = 0.15
+STAR_MAX_PARALLAX = 0.55
 
 # station constants
 STATION_X = WORLD_WIDTH // 2
@@ -56,7 +62,7 @@ SHIP_START_Y = STATION_Y - DOCKING_RADIUS + 25
 
 # fuel constants
 STARTING_MAX_FUEL = 100
-FUEL_BURN_RATE = 4
+STARTING_FUEL_BURN_RATE = 5.0
 FUEL_PRICE_PER_UNIT = 1
 
 # recovery constants
@@ -98,14 +104,48 @@ STARTING_CARGO_CAPACITY = 5
 COLLECTIBLE_OFFSCREEN_TIME = 5.0
 
 # Physics constants
-SHIP_ACCEL = 600
+SHIP_ACCEL = 350
 SHIP_DRAG = .98
-MAX_SPEED = 1000
-ROTATION_SPEED = 195
+STARTING_MAX_SPEED = 600
+STARTING_ROTATION_SPEED = 120
 
 # collision physics
 SHIP_MASS = 2.0
 COLLISION_BOUNCE = 0.8
+
+# ship upgrade constants
+UPGRADE_COSTS = (500, 1200, 2500)
+MAX_UPGRADE_LEVEL = len(UPGRADE_COSTS)
+
+UPGRADE_ORDER = (
+    "fuel_efficiency",
+    "fuel_capacity",
+    "cargo_capacity",
+    "armor",
+    "turning",
+    "acceleration",
+    "top_speed"
+)
+
+UPGRADE_LABELS = {
+    "fuel_efficiency": "Fuel Efficiency",
+    "fuel_capacity": "Fuel Capacity",
+    "cargo_capacity": "Cargo Capacity",
+    "armor": "Armor",
+    "turning": "Turning",
+    "acceleration": "Acceleration",
+    "top_speed": "Top Speed"
+}
+
+UPGRADE_VALUES = {
+    "fuel_efficiency": (5.0, 4.0, 3.0, 2.25),
+    "fuel_capacity": (100, 140, 180, 240),
+    "cargo_capacity": (5, 7, 10, 14),
+    "armor": (100, 125, 160, 200),
+    "turning": (120, 145, 170, 195),
+    "acceleration": (350, 450, 525, 600),
+    "top_speed": (600, 750, 875, 1000)
+}
 
 class Camera:
     """camera that follows player around the world"""
@@ -247,109 +287,234 @@ class Station:
             4
         )
 
+class StarField:
+    """camera-centered starfield with wrapping stars."""
+
+    def __init__(self, camera):
+        self.stars = []
+        self.last_camera_pos = camera.pos.copy()
+
+        for i in range(CAMERA_STAR_COUNT):
+            pos = pygame.Vector2(
+                random.uniform(0, SCREEN_WIDTH),
+                random.uniform(0, SCREEN_HEIGHT)
+            )
+
+            parallax = random.uniform(
+                STAR_MIN_PARALLAX,
+                STAR_MAX_PARALLAX
+            )
+
+            # closer stars appear brighter and slightly larger.
+            brightness = round(
+                100 + 155 * parallax
+            )
+
+            if parallax > 0.4:
+                size = 2
+            else:
+                size = 1
+
+            self.stars.append(
+                [pos, brightness, size, parallax]
+            )
+
+    def draw(self, screen, camera):
+        """move and draw stars relative to camera movement."""
+
+        camera_movement = (
+            camera.pos - self.last_camera_pos
+        )
+
+        for star in self.stars:
+            pos = star[0]
+            brightness = star[1]
+            size = star[2]
+            parallax = star[3]
+
+            # Move stars opposite the camera.
+            pos -= camera_movement * parallax
+
+            # Wrap stars around the screen edges.
+            pos.x %= SCREEN_WIDTH
+            pos.y %= SCREEN_HEIGHT
+
+            color = (
+                brightness,
+                brightness,
+                brightness
+            )
+
+            pygame.draw.circle(
+                screen,
+                color,
+                (
+                    round(pos.x),
+                    round(pos.y)
+                ),
+                size
+            )
+
+        self.last_camera_pos = camera.pos.copy()
+
 class StationMenu:
-    """mouse operated menu for station services"""
+    """mouse-operated menu for station services and upgrades."""
 
     def __init__(self):
         self.is_open = False
+        self.page = "services"
 
         self.panel_rect = pygame.Rect(
-            SCREEN_WIDTH // 2 - 250,
-            SCREEN_HEIGHT // 2 - 260,
-            500,
-            520
+            SCREEN_WIDTH // 2 - 400,
+            SCREEN_HEIGHT // 2 - 400,
+            800,
+            800
         )
 
         button_x = self.panel_rect.x + 60
         button_width = self.panel_rect.width - 120
         button_height = 55
 
+        # Station-services buttons
         self.sell_button = pygame.Rect(
-            button_x,
-            self.panel_rect.y + 210,
-            button_width,
-            button_height
-        )
-
-        self.fuel_button = pygame.Rect(
             button_x,
             self.panel_rect.y + 280,
             button_width,
             button_height
         )
 
-        self.upgrade_button = pygame.Rect(
+        self.fuel_button = pygame.Rect(
             button_x,
             self.panel_rect.y + 350,
             button_width,
             button_height
         )
 
+        self.upgrade_button = pygame.Rect(
+            button_x,
+            self.panel_rect.y + 420,
+            button_width,
+            button_height
+        )
+
         self.close_button = pygame.Rect(
             button_x,
-            self.panel_rect.y + 430,
+            self.panel_rect.y + 500,
+            button_width,
+            button_height
+        )
+
+        # Upgrade-page buttons
+        self.upgrade_buttons = {}
+
+        upgrade_y = self.panel_rect.y + 150
+
+        for upgrade_name in UPGRADE_ORDER:
+            self.upgrade_buttons[upgrade_name] = pygame.Rect(
+                button_x,
+                upgrade_y,
+                button_width,
+                button_height
+            )
+
+            upgrade_y += 70
+
+        self.back_button = pygame.Rect(
+            button_x,
+            self.panel_rect.bottom - 70,
             button_width,
             button_height
         )
 
     def open_menu(self, ship):
-        """open menu and stop ship"""
+        """open the station menu and stop the ship."""
 
         self.is_open = True
+        self.page = "services"
+
         ship.vel = pygame.Vector2(0, 0)
         ship.acc = pygame.Vector2(0, 0)
 
     def close_menu(self):
-        """close menu"""
+        """close the station menu."""
 
         self.is_open = False
+        self.page = "services"
 
     def buy_fuel(self, ship, credits):
-        """ purchase as much missing fuel as the player can afford"""
+        """purchase as much missing fuel as the player can afford."""
 
-        missing_fuel = math.ceil(ship.max_fuel - ship.fuel)
+        missing_fuel = math.ceil(
+            ship.max_fuel - ship.fuel
+        )
 
-        affordable_fuel = (credits // FUEL_PRICE_PER_UNIT)
+        affordable_fuel = (
+            credits // FUEL_PRICE_PER_UNIT
+        )
 
-        fuel_purchased = min(missing_fuel, affordable_fuel)
+        fuel_purchased = min(
+            missing_fuel,
+            affordable_fuel
+        )
 
-        fuel_cost = (fuel_purchased * FUEL_PRICE_PER_UNIT)
+        fuel_cost = (
+            fuel_purchased
+            * FUEL_PRICE_PER_UNIT
+        )
 
         ship.fuel += fuel_purchased
-        ship.fuel = min(ship.fuel, ship.max_fuel)
+        ship.fuel = min(
+            ship.fuel,
+            ship.max_fuel
+        )
 
-        credits -= fuel_cost
-
-        return credits
+        return credits - fuel_cost
 
     def handle_click(self, mouse_pos, ship, credits):
-        """handle clicing station menu buttons"""
+        """Handle mouse clicks on the current menu page."""
 
-        if self.sell_button.collidepoint(mouse_pos):
-            credits += ship.unload_cargo()
+        if self.page == "services":
+            if self.sell_button.collidepoint(mouse_pos):
+                if ship.cargo:
+                    credits += ship.unload_cargo()
 
-        elif self.fuel_button.collidepoint(mouse_pos):
-            if ship.fuel < ship.max_fuel and credits > 0:
-                credits = self.buy_fuel(ship, credits)
+            elif self.fuel_button.collidepoint(mouse_pos):
+                if ship.fuel < ship.max_fuel and credits > 0:
+                    credits = self.buy_fuel(
+                        ship,
+                        credits
+                    )
 
-        elif self.upgrade_button.collidepoint(mouse_pos):
-            # Upgrade screen will be added later
-            pass
+            elif self.upgrade_button.collidepoint(mouse_pos):
+                self.page = "upgrades"
 
-        elif self.close_button.collidepoint(mouse_pos):
-            self.close_menu()
+            elif self.close_button.collidepoint(mouse_pos):
+                self.close_menu()
+
+        elif self.page == "upgrades":
+            for upgrade_name, button in self.upgrade_buttons.items():
+                if button.collidepoint(mouse_pos):
+                    credits = ship.purchase_upgrade(
+                        upgrade_name,
+                        credits
+                    )
+
+                    break
+
+            if self.back_button.collidepoint(mouse_pos):
+                self.page = "services"
 
         return credits
 
     def draw_button(
-            self,
-            screen,
-            rect,
-            text,
-            font,
-            enabled = True
+        self,
+        screen,
+        rect,
+        text,
+        font,
+        enabled=True
     ):
-        """draw menu button with mouse over highlighting"""
+        """draw a button with mouse-hover highlighting."""
 
         mouse_pos = pygame.mouse.get_pos()
         hovered = rect.collidepoint(mouse_pos)
@@ -370,80 +535,69 @@ class StationMenu:
             screen,
             color,
             rect,
-            border_radius = 8
+            border_radius=8
         )
 
         pygame.draw.rect(
-            screen, 
+            screen,
             STATION_OUTLINE_COLOR,
             rect,
             2,
-            border_radius = 8
+            border_radius=8
         )
 
-        text_surface = font.render(text, True, text_color)
+        text_surface = font.render(
+            text,
+            True,
+            text_color
+        )
 
-        text_rect = text_surface.get_rect(center = rect.center)
+        text_rect = text_surface.get_rect(
+            center=rect.center
+        )
 
         screen.blit(text_surface, text_rect)
 
-    def draw(
-            self,
-            screen,
-            ship,
-            credits,
-            title_font,
-            menu_font,
-            small_font
+    def format_upgrade_value(
+        self,
+        upgrade_name,
+        value
     ):
-        """draw station menu"""
+        """format an upgrade value for display."""
 
-        if not self.is_open:
-            return
+        if upgrade_name == "fuel_efficiency":
+            return f"{value:.2f} fuel/sec"
 
-        # darken game behind menu
-        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 170))
-        screen.blit (overlay, (0, 0))
+        if upgrade_name == "turning":
+            return f"{value} deg/sec"
 
-        # main panel
-        pygame.draw.rect(
-            screen,
-            (20, 30, 50),
-            self.panel_rect,
-            border_radius = 12
-        )
+        return str(value)
 
-        pygame.draw.rect(
-            screen,
-            STATION_OUTLINE_COLOR,
-            self.panel_rect,
-            3,
-            border_radius = 12
-        )
-
-        title = title_font.render("SPACE STATION", True, STATION_OUTLINE_COLOR)
-        title_rect = title.get_rect(
-            center = (
-                self.panel_rect.centerx,
-                self.panel_rect.y + 45
-            )
-        )
-
-        screen.blit(title, title_rect)
+    def draw_services_page(
+        self,
+        screen,
+        ship,
+        credits,
+        menu_font,
+        small_font
+    ):
+        """draw cargo, fuel, and navigation services."""
 
         cargo_status = menu_font.render(
             (
-            f"Cargo: {ship.get_used_cargo_space()}"
-            f"/{ship.cargo_capacity}"
-            f"  Value: {ship.get_cargo_value()}"
+                f"Cargo: {ship.get_used_cargo_space()}"
+                f"/{ship.cargo_capacity}"
+                f"   Value: {ship.get_cargo_value()}"
             ),
             True,
             (255, 255, 255)
         )
 
         fuel_status = menu_font.render(
-            f"Fuel: {math.ceil(ship.fuel)}/{ship.max_fuel}",
+            (
+                f"Fuel: {math.ceil(ship.fuel)}"
+                f"/{ship.max_fuel}"
+            ),
             True,
             (255, 255, 255)
         )
@@ -457,53 +611,66 @@ class StationMenu:
         screen.blit(
             cargo_status,
             (
-                self.panel_rect.x + 35,
-                self.panel_rect.y + 90
+                self.panel_rect.x + 45,
+                self.panel_rect.y + 100
             )
         )
 
         screen.blit(
             fuel_status,
             (
-                self.panel_rect.x + 35,
-                self.panel_rect.y + 125
+                self.panel_rect.x + 45,
+                self.panel_rect.y + 145
             )
         )
 
         screen.blit(
             credit_status,
             (
-                self.panel_rect.x + 35,
-                self.panel_rect.y + 160
+                self.panel_rect.x + 45,
+                self.panel_rect.y + 190
             )
         )
 
-        missing_fuel = math.ceil(ship.max_fuel - ship.fuel)
+        missing_fuel = math.ceil(
+            ship.max_fuel - ship.fuel
+        )
 
-        full_refuel_cost = (missing_fuel * FUEL_PRICE_PER_UNIT)
-
-        self.draw_button(
-                screen,
-                self.sell_button,
-                f"Sell Cargo (+{ship.get_cargo_value()} credits)",
-                small_font,
-                enabled=len(ship.cargo) > 0
+        full_refuel_cost = (
+            missing_fuel
+            * FUEL_PRICE_PER_UNIT
         )
 
         self.draw_button(
-                screen,
-                self.fuel_button,
-                f"Buy Fuel ({full_refuel_cost} credits)",
-                small_font,
-                enabled=missing_fuel > 0 and credits >= FUEL_PRICE_PER_UNIT
+            screen,
+            self.sell_button,
+            (
+                "Sell Cargo "
+                f"(+{ship.get_cargo_value()} credits)"
+            ),
+            small_font,
+            enabled=bool(ship.cargo)
+        )
+
+        self.draw_button(
+            screen,
+            self.fuel_button,
+            (
+                "Buy Fuel "
+                f"({full_refuel_cost} credits)"
+            ),
+            small_font,
+            enabled=(
+                missing_fuel > 0
+                and credits >= FUEL_PRICE_PER_UNIT
+            )
         )
 
         self.draw_button(
             screen,
             self.upgrade_button,
-            "Ship Upgrades - Coming Soon",
-            small_font,
-            enabled = False
+            "Ship Upgrades",
+            small_font
         )
 
         self.draw_button(
@@ -512,6 +679,174 @@ class StationMenu:
             "Undock",
             small_font
         )
+
+    def draw_upgrades_page(
+        self,
+        screen,
+        ship,
+        credits,
+        menu_font,
+        small_font
+    ):
+        """draw all purchasable ship upgrades."""
+
+        credit_status = menu_font.render(
+            f"Available Credits: {credits}",
+            True,
+            (255, 255, 255)
+        )
+
+        credit_rect = credit_status.get_rect(
+            center=(
+                self.panel_rect.centerx,
+                self.panel_rect.y + 105
+            )
+        )
+
+        screen.blit(
+            credit_status,
+            credit_rect
+        )
+
+        for upgrade_name in UPGRADE_ORDER:
+            button = self.upgrade_buttons[
+                upgrade_name
+            ]
+
+            level = ship.upgrade_levels[
+                upgrade_name
+            ]
+
+            label = UPGRADE_LABELS[
+                upgrade_name
+            ]
+
+            current_value = UPGRADE_VALUES[
+                upgrade_name
+            ][level]
+
+            current_text = self.format_upgrade_value(
+                upgrade_name,
+                current_value
+            )
+
+            if level >= MAX_UPGRADE_LEVEL:
+                button_text = (
+                    f"{label}  Lv {level}/{MAX_UPGRADE_LEVEL}"
+                    f"  |  {current_text}  |  MAX"
+                )
+
+                enabled = False
+
+            else:
+                next_value = UPGRADE_VALUES[
+                    upgrade_name
+                ][level + 1]
+
+                next_text = self.format_upgrade_value(
+                    upgrade_name,
+                    next_value
+                )
+
+                cost = UPGRADE_COSTS[level]
+
+                button_text = (
+                    f"{label}  Lv {level}/{MAX_UPGRADE_LEVEL}"
+                    f"  |  {current_text} -> {next_text}"
+                    f"  |  {cost} cr"
+                )
+
+                enabled = credits >= cost
+
+            self.draw_button(
+                screen,
+                button,
+                button_text,
+                small_font,
+                enabled=enabled
+            )
+
+        self.draw_button(
+            screen,
+            self.back_button,
+            "Back to Station Services",
+            small_font
+        )
+
+    def draw(
+        self,
+        screen,
+        ship,
+        credits,
+        title_font,
+        menu_font,
+        small_font
+    ):
+        """draw the current station-menu page."""
+
+        if not self.is_open:
+            return
+
+        overlay = pygame.Surface(
+            (SCREEN_WIDTH, SCREEN_HEIGHT),
+            pygame.SRCALPHA
+        )
+
+        overlay.fill((0, 0, 0, 170))
+        screen.blit(overlay, (0, 0))
+
+        pygame.draw.rect(
+            screen,
+            (20, 30, 50),
+            self.panel_rect,
+            border_radius=12
+        )
+
+        pygame.draw.rect(
+            screen,
+            STATION_OUTLINE_COLOR,
+            self.panel_rect,
+            3,
+            border_radius=12
+        )
+
+        if self.page == "services":
+            title_text = "SPACE STATION"
+        else:
+            title_text = "SHIP UPGRADES"
+
+        title = title_font.render(
+            title_text,
+            True,
+            STATION_OUTLINE_COLOR
+        )
+
+        title_rect = title.get_rect(
+            center=(
+                self.panel_rect.centerx,
+                self.panel_rect.y + 45
+            )
+        )
+
+        screen.blit(title, title_rect)
+
+        if self.page == "services":
+            self.draw_services_page(
+                screen,
+                ship,
+                credits,
+                menu_font,
+                small_font
+            )
+
+        else:
+            self.draw_upgrades_page(
+                screen,
+                ship,
+                credits,
+                menu_font,
+                small_font
+            )
 
 def spawn_outside_camera(camera, radius):
     """reate a position just outside a random camera edge"""
@@ -821,16 +1156,88 @@ class Spaceship:
 
         # cargo storage
         self.cargo = []
-        self.cargo_capacity = STARTING_CARGO_CAPACITY
 
-        # fuel 
-        self.max_fuel = STARTING_MAX_FUEL
-        self.fuel = self.max_fuel
-
+        # ship mass for collision physics
         self.mass = SHIP_MASS
+        
+        # upgrade levels and starting stats
+        self.reset_upgrades()
 
-        self.max_health = STARTING_MAX_HEALTH
+    def reset_upgrades(self):
+        """restore every ship upgrade to its starting level."""
+
+        self.upgrade_levels = {
+            upgrade_name: 0
+            for upgrade_name in UPGRADE_ORDER
+        }
+
+        self.fuel_burn_rate = UPGRADE_VALUES["fuel_efficiency"][0]
+
+        self.max_fuel = UPGRADE_VALUES["fuel_capacity"][0]
+
+        self.cargo_capacity = UPGRADE_VALUES["cargo_capacity"][0]
+
+        self.max_health = UPGRADE_VALUES["armor"][0]
+
+        self.turn_speed = UPGRADE_VALUES["turning"][0]
+
+        self.ship_accel = UPGRADE_VALUES["acceleration"][0]
+
+        self.max_speed = UPGRADE_VALUES["top_speed"][0]
+
+        self.fuel = self.max_fuel
         self.health = self.max_health
+
+    def purchase_upgrade(self, upgrade_name, credits):
+        """purchase one level of a ship upgrade."""
+
+        current_level = self.upgrade_levels[upgrade_name]
+
+        if current_level >= MAX_UPGRADE_LEVEL:
+            return credits
+
+        cost = UPGRADE_COSTS[current_level]
+
+        if credits < cost:
+            return credits
+
+        new_level = current_level + 1
+
+        old_max_fuel = self.max_fuel
+        old_max_health = self.max_health
+
+        self.upgrade_levels[upgrade_name] = new_level
+
+        if upgrade_name == "fuel_efficiency":
+            self.fuel_burn_rate = UPGRADE_VALUES[upgrade_name][new_level]
+
+        elif upgrade_name == "fuel_capacity":
+            self.max_fuel = UPGRADE_VALUES[upgrade_name][new_level]
+
+            added_capacity = (self.max_fuel - old_max_fuel)
+
+            self.fuel += added_capacity
+
+        elif upgrade_name == "cargo_capacity":
+            self.cargo_capacity = UPGRADE_VALUES[upgrade_name][new_level]
+
+        elif upgrade_name == "armor":
+            self.max_health = UPGRADE_VALUES[upgrade_name][new_level]
+
+            added_health = (self.max_health - old_max_health)
+
+            self.health += added_health
+
+        elif upgrade_name == "turning":
+            self.turn_speed = UPGRADE_VALUES[upgrade_name][new_level]
+
+        elif upgrade_name == "acceleration":
+            self.ship_accel = UPGRADE_VALUES[upgrade_name][new_level]
+
+        elif upgrade_name == "top_speed":
+            self.max_speed = UPGRADE_VALUES[upgrade_name][new_level]
+
+        return credits - cost
 
     def apply_force(self, force):
         """Apply force to ship"""
@@ -894,25 +1301,25 @@ class Spaceship:
 
         # player input for turning let and right
         if keys[K_a]:
-            self.angle -= ROTATION_SPEED * dt
+            self.angle -= self.turn_speed * dt
         if keys[K_d]:
-            self.angle += ROTATION_SPEED * dt
+            self.angle += self.turn_speed * dt
 
         # direction ship is facing
         forward = pygame.Vector2(0, -1).rotate(self.angle)
 
         # forward acceleration
         if keys[K_w] and self.fuel > 0:
-            self.acc = forward * SHIP_ACCEL
+            self.acc = forward * self.ship_accel
 
-            self.fuel -= FUEL_BURN_RATE * dt
+            self.fuel -= self.fuel_burn_rate * dt
             self.fuel = max(0, self.fuel)
 
         self.vel += self.acc * dt
 
         # limit max speed
-        if self.vel.length() > MAX_SPEED:
-            self.vel.scale_to_length(MAX_SPEED)
+        if self.vel.length() > self.max_speed:
+            self.vel.scale_to_length(self.max_speed)
 
         # save current trail position
         self.trail.append((self.pos.copy(), self.angle))
@@ -1531,19 +1938,8 @@ def main():
 
     credits = 0
 
-    # setting up star field
-    stars = []
-
-    for i in range(WORLD_STAR_COUNT):
-        pos = pygame.Vector2(
-            random.randint(0, WORLD_WIDTH),
-            random.randint(0, WORLD_HEIGHT)
-        )
-
-        brightness = random.randint(100, 255)
-        size = random.randint(1, 2)
-
-        stars.append((pos, brightness, size))
+    # setting up camera-centered star field
+    star_field = StarField(camera)
 
     # ===============
     # MAIN GAME LOOP
@@ -1600,10 +1996,7 @@ def main():
                     invuln_timer = 0
 
                     ship.cargo.clear()
-                    ship.cargo_capacity = STARTING_CARGO_CAPACITY
-
-                    ship.max_fuel = STARTING_MAX_FUEL
-                    ship.fuel = ship.max_fuel
+                    ship.reset_upgrades()
 
                     ship.reset()
                     camera.update(ship.pos)
@@ -1779,18 +2172,7 @@ def main():
         screen.fill(BACKGROUND_COLOR)
 
         # draw stars
-        for world_pos, brightness, size in stars:
-            screen_pos = camera.apply(world_pos)
-
-            if (0 <= screen_pos.x <= SCREEN_WIDTH and 0 <= screen_pos.y <= SCREEN_HEIGHT):
-                color = (brightness, brightness, brightness)
-
-                pygame.draw.circle(
-                    screen,
-                    color,
-                    (round(screen_pos.x), round(screen_pos.y)),
-                    size
-                )
+        star_field.draw(screen, camera)
 
         # draw station
         station.draw(screen, camera)
