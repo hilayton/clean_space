@@ -56,7 +56,7 @@ RESPAWN_PROTECTION_TIME = 2.0
 STARTING_MAX_HEALTH = 100
 ASTEROID_COLLISION_DAMAGE = 25
 HIT_INVULN_TIME = 0.75
-# starting ship aboe station, facing away from it
+# starting ship above station, facing away from it
 SHIP_START_X = STATION_X
 SHIP_START_Y = STATION_Y - DOCKING_RADIUS + 25
 
@@ -64,6 +64,9 @@ SHIP_START_Y = STATION_Y - DOCKING_RADIUS + 25
 STARTING_MAX_FUEL = 100
 STARTING_FUEL_BURN_RATE = 5.0
 FUEL_PRICE_PER_UNIT = 1
+
+# repair constants
+REPAIR_COST = 5
 
 # recovery constants
 RESCUE_PENALTY_RATE = 0.05
@@ -397,9 +400,16 @@ class StationMenu:
             button_height
         )
 
+        self.repair_button = pygame.Rect(
+            button_x,
+            self.panel_rect.y + 490,
+            button_width,
+            button_height
+        )
+
         self.close_button = pygame.Rect(
             button_x,
-            self.panel_rect.y + 500,
+            self.panel_rect.y + 570,
             button_width,
             button_height
         )
@@ -470,6 +480,18 @@ class StationMenu:
 
         return credits - fuel_cost
 
+    def repair_ship(self, ship, credits):
+        """repair ship while docked"""
+
+        missing_health = math.ceil(ship.max_health - ship.health)
+        affordable_health = credits // REPAIR_COST
+        amount_repiared = min(missing_health, affordable_health)
+
+        ship.health = min(ship.max_health, ship.health + amount_repiared)
+
+        repair_cost = amount_repiared * REPAIR_COST
+        return credits - repair_cost
+
     def handle_click(self, mouse_pos, ship, credits):
         """Handle mouse clicks on the current menu page."""
 
@@ -487,6 +509,13 @@ class StationMenu:
 
             elif self.upgrade_button.collidepoint(mouse_pos):
                 self.page = "upgrades"
+
+            elif self.repair_button.collidepoint(mouse_pos):
+                if ship.health < ship.max_health and credits >= REPAIR_COST:
+                    credits = self.repair_ship(
+                        ship,
+                        credits
+                    )
 
             elif self.close_button.collidepoint(mouse_pos):
                 self.close_menu()
@@ -602,6 +631,15 @@ class StationMenu:
             (255, 255, 255)
         )
 
+        health_status = menu_font.render(
+            (
+                f"Health: {ship.health}"
+                f"/{ship.max_health}"
+            ),
+            True,
+            (255, 255, 255)
+        )
+
         credit_status = menu_font.render(
             f"Credits: {credits}",
             True,
@@ -625,10 +663,18 @@ class StationMenu:
         )
 
         screen.blit(
-            credit_status,
+            health_status,
             (
                 self.panel_rect.x + 45,
                 self.panel_rect.y + 190
+            )
+        )
+
+        screen.blit(
+            credit_status,
+            (
+                self.panel_rect.x + 45,
+                self.panel_rect.y + 235
             )
         )
 
@@ -649,7 +695,7 @@ class StationMenu:
                 f"(+{ship.get_cargo_value()} credits)"
             ),
             small_font,
-            enabled=bool(ship.cargo)
+            enabled = bool(ship.cargo)
         )
 
         self.draw_button(
@@ -660,7 +706,7 @@ class StationMenu:
                 f"({full_refuel_cost} credits)"
             ),
             small_font,
-            enabled=(
+            enabled = (
                 missing_fuel > 0
                 and credits >= FUEL_PRICE_PER_UNIT
             )
@@ -671,6 +717,17 @@ class StationMenu:
             self.upgrade_button,
             "Ship Upgrades",
             small_font
+        )
+
+        self.draw_button(
+            screen,
+            self.repair_button,
+            "Repair Ship",
+            small_font,
+            enabled = (
+                ship.health <= ship.max_health
+                and credits >= REPAIR_COST
+            )
         )
 
         self.draw_button(
@@ -1408,7 +1465,7 @@ class Spaceship:
 
 
     def keep_inside_world(self):
-        """preventing ship from leaving world"""
+        """prevent ship from leaving world"""
 
         half_size = self.size / 2
 
