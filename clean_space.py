@@ -868,7 +868,7 @@ class StationMenu:
         )
 
         if self.page == "services":
-            title_text = "SPACE STATION"
+            title_text = "STATION SERVICES"
         else:
             title_text = "SHIP UPGRADES"
 
