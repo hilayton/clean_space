@@ -30,11 +30,13 @@ ESC: Close game
 - Star field
 - Station at center of world
 - Station drop-off radus
+    - also acts a shield from asteroids
 - Converted score to cargo storage
 - Added station menu
-    - Shows current credits and fuel level
-    - Has menu options to sell garbage collected and buy fuel
-    - Placeholder added for ship upgrades
+    - Shows current credits, fuel level, and ship health
+    - Has menu options to sell garbage collected, buy fuel, and repair ship
+    - added ship upgrades sub-menu
+        - each upgrade has three levels with increasing costs
 - Convert delivered cargo into credits
 - Added minimap
 - Added ship fuel and refueling
@@ -47,13 +49,17 @@ ESC: Close game
     - If no more lives available, shows game over screen
 
 ### To-do
-- Create upgrade menu
-    - Create ship upgrade values
+- add basic VFX/ SFX
 
 ### Stretch Goals
 - Add multiple ship classes with different stats
     - Speed, cargo, turning rate
 - Add ore and salvage sub-classes
+- Add background planets
+- Add reason for world being so large
+- Combat maybe? 
+- Refine SFX, VFX, UI/ UX
+- Replace basic shapes with sprites
 
 
 # Old README
