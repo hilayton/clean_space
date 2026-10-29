@@ -1,7 +1,55 @@
 # Clean space
+
+## Installation
+
+Clone the repository and enter the project folder:
+
+```sh
+git clone https://github.com/hilayton/clean_space.git
+cd clean_space
+```
+
+## Setup
+
+Current versions as of October 29, 2026: [Python 3.15.2](https://blog.python.org/2026/10/python-3152-31410-31318-31216-31118/) and [Pygame 2.6.1](https://pypi.org/project/pygame/). Install Python before continuing.
+
+Create a virtual environment:
+
+```sh
+python -m venv .venv
+```
+
+Activate it on Windows (PowerShell):
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Or on macOS/Linux:
+
+```sh
+source .venv/bin/activate
+```
+
+Install Pygame using the requirements file:
+
+```sh
+python -m pip install -r requirements.txt
+```
+
+Run the game:
+
+```sh
+python clean_space.py
+```
+
+**Asset disclaimer:** Art and sound assets are included in the repository but have not yet been added to the game.
+
+## About
+
 Explore and clean up your sector of space. 
 
-Hired to work out of the local space station, you'll travel and clean up all the garbage left behind by pesky litter bugs. You get paid out for all the garbage you bring back to the station, and you can use your funds to upgrade your ship, or even buy a different one. 
+Hired to work out of the local space station, you'll travel and clean up all the garbage left behind by pesky litter bugs. You get paid out for all the garbage you bring back to the station, and you can use your funds to upgrade your ship. 
 
 Watch out for asteroids though, as damaging your ship too much will strand you. The local towing service will bring you back to the station, though you'll have to dump all your cargo and pay a nominal fee for the service. 
 
@@ -18,6 +66,7 @@ R: Reset
 ESC: Close game
 
 ## Work Outline
+
 ### Completed
 - Seperate screen and world dimension
 - world-coordinate positions for the ship and objects
